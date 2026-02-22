@@ -18,3 +18,4 @@ class User(Base):
     bills = relationship("Bill", back_populates="user")
     rewards = relationship("Reward", back_populates="user")
     alerts = relationship("Alert", back_populates="user")
+    category_rules = relationship("CategoryRule", back_populates="user")

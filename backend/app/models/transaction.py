@@ -10,6 +10,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id"))
     description = Column(String)
+    category = Column(String, nullable=True)
     amount = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

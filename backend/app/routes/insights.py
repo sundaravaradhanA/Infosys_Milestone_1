@@ -24,9 +24,25 @@ def get_summary(db: Session = Depends(get_db)):
 
 @router.get("/spending-by-category")
 def get_spending_by_category(db: Session = Depends(get_db)):
-    transactions = db.query(
-        Transaction.description,
-        func.sum(Transaction.amount).label("total")
-    ).group_by(Transaction.description).all()
+    # Get all transactions with their categories
+    transactions = db.query(Transaction).filter(
+        Transaction.amount < 0,  # Only expenses (negative amounts)
+        Transaction.category != None,  # Exclude null categories
+        Transaction.category != ""   # Exclude empty categories
+    ).all()
     
-    return [{"category": t.description, "amount": float(t.total)} for t in transactions]
+    # Group by category and sum absolute values in Python
+    category_totals = {}
+    for txn in transactions:
+        cat = txn.category
+        amount = abs(txn.amount)  # Convert to positive in Python
+        if cat in category_totals:
+            category_totals[cat] += amount
+        else:
+            category_totals[cat] = amount
+    
+    # Convert to list and sort by amount descending
+    result = [{"category": cat, "amount": round(amount, 2)} 
+              for cat, amount in category_totals.items()]
+    
+    return sorted(result, key=lambda x: x["amount"], reverse=True)

@@ -16,4 +16,4 @@ class BillResponse(BillBase):
     is_paid: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True

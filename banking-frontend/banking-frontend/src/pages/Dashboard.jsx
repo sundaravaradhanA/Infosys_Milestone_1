@@ -2,15 +2,49 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, Routes, Route, NavLink } from "react-router-dom";
 import Accounts from "./Accounts";
 import Transactions from "./Transactions";
-import Analytics from "./analytics";
-import Budget from "./budget";
-import KYC from "./kyc";
-import Notifications from "./notifications";
-import Rewards from "./rewards";
-import Profile from "./profile";
+import Analytics from "./Analytics";
+import Budget from "./Budget";
+import KYC from "./KYC";
+import Notifications from "./Notifications";
+import Rewards from "./Rewards";
+import Profile from "./Profile";
 
 function Dashboard() {
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    // Fetch unread notification count
+    const fetchUnreadCount = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      
+      try {
+        const response = await fetch("http://127.0.0.1:8000/alerts/unread-count?user_id=1", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUnreadCount(data.unread_count || 0);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread count:", err);
+      }
+    };
+
+    fetchUnreadCount();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("auth");
+    navigate("/");
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-100">
@@ -31,7 +65,7 @@ function Dashboard() {
             { name: "Analytics", path: "/dashboard/analytics" },
             { name: "Budget", path: "/dashboard/budget" },
             { name: "KYC", path: "/dashboard/kyc" },
-            { name: "Notifications", path: "/dashboard/notifications" },
+            { name: "Notifications", path: "/dashboard/notifications", badge: unreadCount },
             { name: "Rewards", path: "/dashboard/rewards" },
             { name: "Profile", path: "/dashboard/profile" },
           ].map((item) => (
@@ -40,7 +74,7 @@ function Dashboard() {
               to={item.path}
               end={item.path === "/dashboard"}
               className={({ isActive }) =>
-                `px-3 py-2 rounded-md transition duration-200
+                `px-3 py-2 rounded-md transition duration-200 flex items-center justify-between
                 ${
                   isActive
                     ? "bg-blue-600 text-white"
@@ -48,16 +82,18 @@ function Dashboard() {
                 }`
               }
             >
-              {item.name}
+              <span>{item.name}</span>
+              {item.badge > 0 && (
+                <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  {item.badge > 99 ? "99+" : item.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
 
         <button
-          onClick={() => {
-            localStorage.removeItem("auth");
-            navigate("/");
-          }}
+          onClick={handleLogout}
           className="mt-auto bg-red-500 hover:bg-red-600 text-white py-2 rounded-md transition"
         >
           Sign out

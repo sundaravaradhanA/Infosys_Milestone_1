@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
 const PREDEFINED_CATEGORIES = [
   "Food & Dining",
@@ -13,6 +13,8 @@ const PREDEFINED_CATEGORIES = [
   "Other"
 ];
 
+const PAGE_SIZE = 20;
+
 function Transactions() {
   const [transactions, setTransactions] = useState([]);
   const [selectedTxn, setSelectedTxn] = useState(null);
@@ -20,26 +22,74 @@ function Transactions() {
   const [saveAsRule, setSaveAsRule] = useState(false);
   const [rules, setRules] = useState([]);
   const [showRulePanel, setShowRulePanel] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const fetchTransactions = useCallback(async (page = 1) => {
+    setLoading(true);
+    const token = localStorage.getItem("token");
+    const skip = (page - 1) * PAGE_SIZE;
+    
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/transactions?skip=${skip}&limit=${PAGE_SIZE}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setTransactions(data);
+      }
+      
+      // Get total count
+      const countRes = await fetch("http://127.0.0.1:8000/transactions/count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        setTotalCount(countData.total);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchRules = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    try {
+      const response = await fetch("http://127.0.0.1:8000/categories/rules", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRules(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    fetchTransactions(currentPage);
+    fetchRules();
+  }, [currentPage, fetchTransactions, fetchRules]);
 
-    fetch("http://127.0.0.1:8000/transactions", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => setTransactions(data))
-      .catch((err) => console.error(err));
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-    fetch("http://127.0.0.1:8000/categories/rules", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => setRules(data))
-      .catch((err) => console.error(err));
-  }, []);
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -84,11 +134,7 @@ function Transactions() {
         
         // Refresh rules if saved as rule
         if (saveAsRule) {
-          const rulesRes = await fetch("http://127.0.0.1:8000/categories/rules", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const rulesData = await rulesRes.json();
-          setRules(rulesData);
+          fetchRules();
         }
         
         alert("Category updated successfully!");
@@ -159,49 +205,104 @@ function Transactions() {
           Transactions
         </h2>
 
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b text-gray-600">
-              <th className="py-3 px-4 font-semibold">Date</th>
-              <th className="py-3 px-4 font-semibold">Time</th>
-              <th className="py-3 px-4 font-semibold">Description</th>
-              <th className="py-3 px-4 font-semibold">Category</th>
-              <th className="py-3 px-4 font-semibold text-right">Amount</th>
-            </tr>
-          </thead>
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <p className="mt-2 text-gray-500">Loading transactions...</p>
+          </div>
+        )}
 
-          <tbody>
-            {transactions.map((txn) => (
-              <tr
-                key={txn.id}
-                className={`border-b hover:bg-gray-50 transition cursor-pointer ${
-                  selectedTxn?.id === txn.id ? "bg-blue-50" : ""
-                }`}
-                onClick={() => handleSelectTransaction(txn)}
-              >
-                <td className="py-3 px-4">
-                  {formatDate(txn.created_at)}
-                </td>
-                <td className="py-3 px-4">
-                  {formatTime(txn.created_at)}
-                </td>
-                <td className="py-3 px-4">{txn.description}</td>
-                <td className="py-3 px-4">
-                  <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-medium">
-                    {txn.category || "Uncategorized"}
+        {/* Transactions Table */}
+        {!loading && (
+          <>
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b text-gray-600">
+                  <th className="py-3 px-4 font-semibold">Date</th>
+                  <th className="py-3 px-4 font-semibold">Time</th>
+                  <th className="py-3 px-4 font-semibold">Description</th>
+                  <th className="py-3 px-4 font-semibold">Category</th>
+                  <th className="py-3 px-4 font-semibold text-right">Amount</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {transactions.map((txn) => (
+                  <tr
+                    key={txn.id}
+                    className={`border-b hover:bg-gray-50 transition cursor-pointer ${
+                      selectedTxn?.id === txn.id ? "bg-blue-50" : ""
+                    }`}
+                    onClick={() => handleSelectTransaction(txn)}
+                  >
+                    <td className="py-3 px-4">
+                      {formatDate(txn.created_at)}
+                    </td>
+                    <td className="py-3 px-4">
+                      {formatTime(txn.created_at)}
+                    </td>
+                    <td className="py-3 px-4">{txn.description}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-1 bg-gray-100 rounded-full text-xs font-medium">
+                        {txn.category || "Uncategorized"}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-3 px-4 text-right font-semibold ${
+                        txn.amount >= 0 ? "text-green-600" : "text-red-500"
+                      }`}
+                    >
+                      ₹{txn.amount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                <div className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * PAGE_SIZE) + 1} to {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} transactions
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Prev
+                  </button>
+                  <span className="px-3 py-1 text-sm">
+                    Page {currentPage} of {totalPages}
                   </span>
-                </td>
-                <td
-                  className={`py-3 px-4 text-right font-semibold ${
-                    txn.amount >= 0 ? "text-green-600" : "text-red-500"
-                  }`}
-                >
-                  ₹{txn.amount}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Right Panel - Category Editor */}
@@ -257,7 +358,6 @@ function Transactions() {
               Update
             </button>
 
-            {/* Show Create Rule button separately */}
             {saveAsRule && (
               <button
                 onClick={handleCreateRule}

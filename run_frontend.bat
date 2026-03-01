@@ -1,4 +1,4 @@
 @echo off
-cd /d d:\Infosys_Milestone_1\banking-frontend\banking-frontend
-npm run dev
-pause
+cd /d %~dp0
+cd banking-frontend\banking-frontend
+start cmd /k "npm run dev"
